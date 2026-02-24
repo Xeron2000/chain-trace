@@ -1,0 +1,11 @@
+[project]
+name = "chain-trace-tools"
+version = "0.1.0"
+description = "Utility scripts for chain-trace skill"
+requires-python = ">=3.10"
+dependencies = [
+  "cloudscraper>=1.2.71",
+]
+
+[tool.uv]
+package = false
