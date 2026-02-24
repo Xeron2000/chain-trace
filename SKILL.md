@@ -1,13 +1,13 @@
 # Chain Trace - 公共接口版多链土狗深度取证
 
-仅使用**公开接口（无需 API key）**，深度追踪 BSC / Solana 链上资金流 + 链下网站与 Twitter(X) 全量关联线索。
+仅使用**公开接口（无需 API key）**，深度追踪 ETH / Base / BSC / Solana 链上资金流 + 链下网站与 Twitter(X) 全量关联线索。
 
 ## 触发条件
 
 用户提到：
 - 追踪钱包/地址/合约资金来源
 - 土狗、庄家、控盘、砸盘、洗盘分析
-- pump.fun / Solana meme / BSC 貔貅风险
+- pump.fun / Solana meme / EVM（ETH/Base/BSC）土狗风险
 - 项目官网、Twitter、团队背景深挖
 - 想要链上 + 链下联合取证
 
@@ -53,12 +53,13 @@
 ## Phase 1: 链识别与地址合法性
 
 识别规则：
-- `0x` 开头 42 位 hex → BSC(EVM)
+- `0x` 开头 42 位 hex → EVM（ETH / Base / BSC）
 - Base58 32-44 位 → Solana
 - 用户明确指定链时，以用户指定为准
+- 未指定链但为 EVM 地址时：优先在 `eth -> base -> bsc` 顺序探测，命中后锁定链
 
 合法性检查：
-- BSC：hex 长度 + 字符集
+- EVM（ETH/Base/BSC）：hex 长度 + 字符集
 - Solana：Base58 字符集 `[1-9A-HJ-NP-Za-km-z]`
 
 ---
@@ -91,7 +92,37 @@ curl -s "https://lite-api.jup.ag/tokens/v2/search?query={mintAddress}"
 >
 > 限制：Jupiter Token API 适合做**可交易性发现**与基础信息补全，不等于官方认证来源；不得仅凭 Jupiter 收录就判定“官方 token”。
 
-### 2.2 BSC 链上（公共 RPC）
+### 2.2 EVM 链上（ETH / Base / BSC 公共 RPC）
+
+#### 2.2.1 Ethereum (ETH) 公共 RPC
+
+候选池（按稳定性优先，需先探测可用性）：
+
+**Tier A（优先）**
+1. `https://cloudflare-eth.com`
+2. `https://ethereum-rpc.publicnode.com`
+3. `https://eth.llamarpc.com`
+
+**Tier B（公开聚合/社区节点）**
+4. `https://eth.drpc.org`
+5. `https://1rpc.io/eth`
+6. `https://rpc.ankr.com/eth`（部分环境可能限流/未授权）
+
+#### 2.2.2 Base 公共 RPC
+
+候选池（按稳定性优先，需先探测可用性）：
+
+**Tier A（优先）**
+1. `https://mainnet.base.org`
+2. `https://base-rpc.publicnode.com`
+3. `https://base.llamarpc.com`
+
+**Tier B（公开聚合/社区节点）**
+4. `https://base.drpc.org`
+5. `https://1rpc.io/base`
+6. `https://rpc.ankr.com/base`（部分环境可能限流/未授权）
+
+#### 2.2.3 BSC 公共 RPC
 
 候选池（按稳定性优先，需先探测可用性）：
 
@@ -130,22 +161,22 @@ curl -s "https://lite-api.jup.ag/tokens/v2/search?query={mintAddress}"
 28. `https://bsc.drpc.org`
 29. `https://rpc.ankr.com/bsc`（常见未授权/需 key 场景）
 
-> 说明：BNB 官方文档明确 mainnet 公共端点存在限流，且部分端点禁用 `eth_getLogs`。高频日志拉取必须走轮换 + 降级。
+> 说明：EVM 公共端点普遍存在限流；其中 BSC 官方文档明确 mainnet 公共端点存在限流，且部分端点禁用 `eth_getLogs`。高频日志拉取必须走轮换 + 降级。
 
 常用 RPC：
 ```bash
 # 链ID
-curl -s -X POST "https://bsc-dataseed.binance.org" \
+curl -s -X POST "{evmRpc}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
 
-# 钱包 BNB 余额
-curl -s -X POST "https://bsc-dataseed.binance.org" \
+# 钱包原生币余额（ETH/Base/BSC 分别返回对应链原生币）
+curl -s -X POST "{evmRpc}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getBalance","params":["{address}","latest"],"id":1}'
 
 # 合约字节码（判定是否合约地址）
-curl -s -X POST "https://bsc-dataseed.binance.org" \
+curl -s -X POST "{evmRpc}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["{address}","latest"],"id":1}'
 
@@ -156,9 +187,14 @@ curl -s -X POST "https://bsc-dataseed.binance.org" \
 # name:        0x06fdde03
 
 # ERC20 Transfer 日志（代币转账轨迹）
-curl -s -X POST "https://bsc-dataseed.binance.org" \
+curl -s -X POST "{evmRpc}" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getLogs","params":[{"fromBlock":"0x{start}","toBlock":"latest","address":"{tokenContract}","topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aeb"]}],"id":1}'
+
+# 常见 evmRpc 示例：
+# ETH  -> https://ethereum-rpc.publicnode.com
+# Base -> https://mainnet.base.org
+# BSC  -> https://bsc-dataseed.binance.org
 ```
 
 ### 2.3 Solana 链上（公共 RPC）
@@ -203,10 +239,26 @@ curl -s -X POST "https://api.mainnet-beta.solana.com" \
   -d '{"jsonrpc":"2.0","id":1,"method":"getTokenSupply","params":["{mintAddress}"]}'
 ```
 
-#### 2.3.1 公共 RPC 抗限流模板（必须）
+#### 2.3.1 多链公共 RPC 抗限流模板（必须）
 
 ```bash
 # --- Endpoint pools ---
+ETH_RPCS=(
+  "https://cloudflare-eth.com"
+  "https://ethereum-rpc.publicnode.com"
+  "https://eth.llamarpc.com"
+  "https://eth.drpc.org"
+  "https://1rpc.io/eth"
+)
+
+BASE_RPCS=(
+  "https://mainnet.base.org"
+  "https://base-rpc.publicnode.com"
+  "https://base.llamarpc.com"
+  "https://base.drpc.org"
+  "https://1rpc.io/base"
+)
+
 BSC_RPCS=(
   "https://bsc-dataseed.binance.org"
   "https://bsc-dataseed1.binance.org"
@@ -283,7 +335,14 @@ rpc_call() {
   local chain="$1"
   local payload="$2"
   local -n pool_ref
-  [ "$chain" = "solana" ] && pool_ref=SOLANA_RPCS || pool_ref=BSC_RPCS
+
+  case "$chain" in
+    solana) pool_ref=SOLANA_RPCS ;;
+    eth)    pool_ref=ETH_RPCS ;;
+    base)   pool_ref=BASE_RPCS ;;
+    bsc)    pool_ref=BSC_RPCS ;;
+    *)      return 1 ;;
+  esac
 
   local now cooldown_until fails out
   for rpc in "${pool_ref[@]}"; do
@@ -345,8 +404,10 @@ uv add cloudscraper
 uv lock
 uv sync --locked
 
-# 探测 Solana / BSC 公开 RPC 池
+# 探测 Solana / ETH / Base / BSC 公开 RPC 池
 uv run python scripts/rpc_probe_cloudscraper.py --chain solana --tries 2
+uv run python scripts/rpc_probe_cloudscraper.py --chain eth --tries 2
+uv run python scripts/rpc_probe_cloudscraper.py --chain base --tries 2
 uv run python scripts/rpc_probe_cloudscraper.py --chain bsc --tries 2
 ```
 
@@ -362,8 +423,10 @@ uv run python scripts/rpc_probe_cloudscraper.py --chain bsc --tries 2
 
 ### 2.4 安全与合约风险（无 key）
 
-1) **GoPlus BSC**
+1) **GoPlus EVM（ETH / Base / BSC）**
 ```bash
+curl -s "https://api.gopluslabs.io/api/v1/token_security/1?contract_addresses={ethTokenAddress}"
+curl -s "https://api.gopluslabs.io/api/v1/token_security/8453?contract_addresses={baseTokenAddress}"
 curl -s "https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={bscTokenAddress}"
 ```
 
@@ -372,8 +435,10 @@ curl -s "https://api.gopluslabs.io/api/v1/token_security/56?contract_addresses={
 curl -s "https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses={solMint}"
 ```
 
-3) **Honeypot.is（BSC）**
+3) **Honeypot.is（EVM）**
 ```bash
+curl -s "https://api.honeypot.is/v2/IsHoneypot?address={tokenAddress}&chainID=1"
+curl -s "https://api.honeypot.is/v2/IsHoneypot?address={tokenAddress}&chainID=8453"
 curl -s "https://api.honeypot.is/v2/IsHoneypot?address={tokenAddress}&chainID=56"
 ```
 
@@ -383,8 +448,8 @@ curl -s "https://api.honeypot.is/v2/IsHoneypot?address={tokenAddress}&chainID=56
 
 ### 3.1 资金来源追踪（Wallet Funding Trace）
 
-1. 抽取目标地址最近 N 条交易（Solana: `getSignaturesForAddress` + `getTransaction`）。
-2. BSC 对代币资金流使用 `eth_getLogs(Transfer)` 追踪输入输出地址。
+1. 抽取目标地址最近 N 条交易（Solana: `getSignaturesForAddress` + `getTransaction`；EVM: `eth_getLogs` / `eth_getTransactionByHash`）。
+2. EVM（ETH/Base/BSC）对代币资金流使用 `eth_getLogs(Transfer)` 追踪输入输出地址。
 3. 标记来源类型：`CEX热钱包 / 桥接地址 / 混币 / 新钱包簇 / 未知`。
 4. 记录每个地址的 `first_funder`、`first_fund_time`、`first_buy_time` 作为后续自动关联输入特征。
 
@@ -449,7 +514,7 @@ relation_score =
 ### 3.4 合约与权限风险
 
 必须检查：
-- BSC: 可升级/owner 权限/黑名单/税率可改
+- EVM（ETH/Base/BSC）: 可升级/owner 权限/黑名单/税率可改
 - Solana: mint authority / freeze authority / metadata 可改性
 - 是否存在 honeypot 税收异常与卖出限制
 
@@ -805,7 +870,7 @@ python3 scripts/score_models.py --input templates/score_input.example.json
 为减少误报，阈值必须按链与流动性分层：
 
 1. 数据分桶：
-- 链：`BSC` / `Solana`
+- 链：`ETH` / `Base` / `BSC` / `Solana`
 - 流动性：`LP < 20K`、`20K~100K`、`>100K`
 
 2. 基准集：
@@ -1050,6 +1115,8 @@ python3 scripts/calibrate_thresholds.py --input templates/calibration_dataset.ex
 
 # 使用 uv + cloudscraper 探测公开 RPC 池（CF/403/429 场景）
 uv run python scripts/rpc_probe_cloudscraper.py --chain solana --tries 2
+uv run python scripts/rpc_probe_cloudscraper.py --chain eth --tries 2
+uv run python scripts/rpc_probe_cloudscraper.py --chain base --tries 2
 uv run python scripts/rpc_probe_cloudscraper.py --chain bsc --tries 2
 
 # 本地评分（公式复算）
@@ -1062,6 +1129,32 @@ python3 scripts/calibrate_thresholds.py --input templates/calibration_dataset.ex
 ---
 
 ## 已知地址库
+
+### Ethereum
+```
+Core assets:
+- 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 (WETH)
+- 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 (USDC)
+
+Routers / Infra:
+- 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D (Uniswap V2 Router)
+- 0xE592427A0AEce92De3Edee1F18E0157C05861564 (Uniswap V3 SwapRouter)
+
+Dead:
+- 0x000000000000000000000000000000000000dEaD
+- 0x0000000000000000000000000000000000000000
+```
+
+### Base
+```
+Core assets:
+- 0x4200000000000000000000000000000000000006 (WETH on Base)
+- 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 (USDC on Base)
+
+Dead:
+- 0x000000000000000000000000000000000000dEaD
+- 0x0000000000000000000000000000000000000000
+```
 
 ### BSC
 ```
@@ -1103,7 +1196,7 @@ Burn:
 
 - 本版只依赖公开接口，**不需要配置任何 API key**。
 - 公共接口会限流：必须实现重试、退避、降级，并在报告里反映置信度下降。
-- BSC/Solana 在无索引器条件下，部分“完整历史归因”不可 100% 还原，必须标记 `Unknown`。
+- ETH/Base/BSC/Solana 在无索引器条件下，部分“完整历史归因”不可 100% 还原，必须标记 `Unknown`。
 - 同名同符号资产可并存：**不得用 ticker/symbol 作为官方身份判据**。
 - DEX/聚合器/媒体页面用于发现线索，不是官方背书来源。
 - 本分析不构成投资建议，仅用于取证与风控参考。

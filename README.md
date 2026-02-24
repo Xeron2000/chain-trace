@@ -1,6 +1,6 @@
 # chain-trace
 
-Public crypto forensics skill for **BSC/Solana** investigations.
+Public crypto forensics skill for **ETH / Base / BSC / Solana** investigations.
 
 Uses public data sources only (no API key required by default).
 
@@ -9,6 +9,7 @@ Uses public data sources only (no API key required by default).
 - Builds an **entity graph** across on-chain + off-chain signals
 - Verifies official identity with a **canonical CA matrix (P0/P1/P2)**
 - Traces funding path, holders, liquidity, authority, and insider/bundle signals
+- Supports EVM + Solana workflows with chain-specific public RPC fallback and anti-rate-limit probing
 - Investigates website/domain/Twitter evidence and contradiction points
 - Outputs a full report with:
   - **Evidence IDs (EID)**
@@ -31,6 +32,10 @@ npx skills add https://github.com/Xeron2000/chain-trace
 
 ```bash
 /chain-trace <token_or_wallet>
+/chain-trace <target> --chain eth
+/chain-trace <target> --chain base
+/chain-trace <target> --chain bsc
+/chain-trace <target> --chain solana
 /chain-trace <target> --deep --all-sources --evidence-graph
 /chain-trace <target> --deep --auto-link --insider --bundle --evidence-graph
 ```
