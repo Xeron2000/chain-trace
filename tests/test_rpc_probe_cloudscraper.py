@@ -23,9 +23,13 @@ class RpcProbeCloudscraperTests(unittest.TestCase):
     def test_build_payload_for_supported_chains(self):
         solana_payload = build_payload("solana")
         bsc_payload = build_payload("bsc")
+        eth_payload = build_payload("eth")
+        base_payload = build_payload("base")
 
         self.assertEqual(solana_payload["method"], "getSlot")
         self.assertEqual(bsc_payload["method"], "eth_blockNumber")
+        self.assertEqual(eth_payload["method"], "eth_blockNumber")
+        self.assertEqual(base_payload["method"], "eth_blockNumber")
 
     def test_classify_response_marks_blocked_patterns(self):
         blocked = classify_response(403, "Error code: 1010", {"error": {"code": 403}})

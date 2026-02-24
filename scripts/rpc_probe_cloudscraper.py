@@ -42,6 +42,24 @@ DEFAULT_BSC_ENDPOINTS = [
     "https://1rpc.io/bnb",
 ]
 
+DEFAULT_ETH_ENDPOINTS = [
+    "https://ethereum-rpc.publicnode.com",
+    "https://eth.llamarpc.com",
+    "https://cloudflare-eth.com",
+    "https://eth.drpc.org",
+    "https://1rpc.io/eth",
+    "https://rpc.ankr.com/eth",
+]
+
+DEFAULT_BASE_ENDPOINTS = [
+    "https://mainnet.base.org",
+    "https://base-rpc.publicnode.com",
+    "https://base.llamarpc.com",
+    "https://base.drpc.org",
+    "https://1rpc.io/base",
+    "https://rpc.ankr.com/base",
+]
+
 CF_BLOCK_PATTERNS = (
     "error code: 1010",
     "error code 1010",
@@ -134,7 +152,9 @@ def probe_once(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    _ = parser.add_argument("--chain", choices=("solana", "bsc"), required=True)
+    _ = parser.add_argument(
+        "--chain", choices=("solana", "bsc", "eth", "base"), required=True
+    )
     _ = parser.add_argument("--tries", type=int, default=2)
     _ = parser.add_argument("--timeout", type=int, default=10)
     _ = parser.add_argument("--sleep", type=float, default=0.2)
@@ -156,9 +176,13 @@ def main() -> int:
             item.strip() for item in args.endpoints.split(",") if item.strip() != ""
         ]
     else:
-        endpoints = (
-            DEFAULT_SOLANA_ENDPOINTS if chain == "solana" else DEFAULT_BSC_ENDPOINTS
-        )
+        endpoint_map: dict[str, list[str]] = {
+            "solana": DEFAULT_SOLANA_ENDPOINTS,
+            "bsc": DEFAULT_BSC_ENDPOINTS,
+            "eth": DEFAULT_ETH_ENDPOINTS,
+            "base": DEFAULT_BASE_ENDPOINTS,
+        }
+        endpoints = endpoint_map[chain]
 
     payload = build_payload(chain)
     scraper = cloudscraper.create_scraper(
