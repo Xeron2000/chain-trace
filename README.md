@@ -185,6 +185,30 @@ uv run python scripts/evm_explorer_client.py \
   --method search
 ```
 
+**Test Twitter Fetcher (with Auto-Camofox)**
+```bash
+cd ~/.claude/skills/chain-trace
+
+# Single tweet (no Camofox needed)
+uv run python scripts/fetch_twitter.py \
+  --url https://x.com/user/status/123456
+
+# User timeline (auto-starts Camofox if needed)
+uv run python scripts/fetch_twitter.py \
+  --user username \
+  --limit 50
+
+# Tweet with replies (auto-starts Camofox)
+uv run python scripts/fetch_twitter.py \
+  --url https://x.com/user/status/123456 \
+  --replies
+
+# Manual Camofox control
+uv run python scripts/camofox_starter.py --check   # Check if running
+uv run python scripts/camofox_starter.py --start   # Start manually
+uv run python scripts/camofox_starter.py --stop    # Stop
+```
+
 ---
 
 ## 🔍 Key Features
@@ -292,13 +316,16 @@ free-solscan-api = { url = "https://github.com/paoloanzn/free-solscan-api/releas
 - ✅ Working: `token_data`, `token_holders_total`, `account_info`, `balance_history`
 
 ### Twitter/X Data (x-tweet-fetcher)
+**Source:** [ythx-101/x-tweet-fetcher](https://github.com/ythx-101/x-tweet-fetcher)
+
 - ⚠️ **Single tweet**: Requires full tweet URL (not just username)
   - ✅ Works: `--url https://x.com/user/status/123456`
   - ❌ Fails: `--user username` (for single tweet)
-- ⚠️ **User timeline**: Requires Camofox browser automation running on `localhost:9377`
-  - Install: `openclaw plugins install @askjo/camofox-browser`
-  - Or: Manual setup via [camofox-browser](https://github.com/jo-inc/camofox-browser)
-- ⚠️ **Replies**: Also requires Camofox
+- ⚠️ **User timeline & Replies**: Requires Camofox browser automation
+  - ✅ **Auto-start**: chain-trace automatically starts Camofox when needed
+  - Manual start: `npx camofox-browser` (runs on `localhost:9377`)
+  - Or install: `openclaw plugins install @askjo/camofox-browser`
+  - Requires Node.js: https://nodejs.org/
 
 ### Rate Limits
 - Public RPCs may return 429/403 under heavy load
