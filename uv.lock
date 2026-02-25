@@ -17,10 +17,14 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cloudscraper" },
+    { name = "free-solscan-api" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "cloudscraper", specifier = ">=1.2.71" }]
+requires-dist = [
+    { name = "cloudscraper", specifier = ">=1.2.71" },
+    { name = "free-solscan-api", url = "https://github.com/paoloanzn/free-solscan-api/releases/download/0.0.4/free_solscan_api-0.0.4-py3-none-any.whl" },
+]
 
 [[package]]
 name = "charset-normalizer"
@@ -124,6 +128,20 @@ sdist = { url = "https://files.pythonhosted.org/packages/ac/25/6d0481860583f4495
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/97/fc88803a451029688dffd7eb446dc1b529657577aec13aceff1cc9628c5d/cloudscraper-1.2.71-py2.py3-none-any.whl", hash = "sha256:76f50ca529ed2279e220837befdec892626f9511708e200d48d5bb76ded679b0", size = 99652, upload-time = "2023-04-25T23:20:15.974Z" },
 ]
+
+[[package]]
+name = "free-solscan-api"
+version = "0.0.4"
+source = { url = "https://github.com/paoloanzn/free-solscan-api/releases/download/0.0.4/free_solscan_api-0.0.4-py3-none-any.whl" }
+dependencies = [
+    { name = "cloudscraper" },
+]
+wheels = [
+    { url = "https://github.com/paoloanzn/free-solscan-api/releases/download/0.0.4/free_solscan_api-0.0.4-py3-none-any.whl", hash = "sha256:5fb436fd41c2e841e83e8d2266cb6ca88ad00ec634cbd59816366e96d4faf8bd" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "cloudscraper", specifier = ">=1.2.71,<2.0.0" }]
 
 [[package]]
 name = "idna"

@@ -4,6 +4,10 @@ Public crypto forensics skill for **ETH / Base / BSC / Solana** investigations.
 
 Uses public data sources only (no API key required by default).
 
+**Solana 数据源优先级：**
+1. **Solscan 逆向 API**（$200/月 → $0）- 提供持有者、DeFi 活动、投资组合等丰富数据
+2. 公共 RPC 降级备选
+
 ## What it does
 
 - Builds an **entity graph** across on-chain + off-chain signals

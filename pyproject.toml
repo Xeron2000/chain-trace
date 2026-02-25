@@ -5,7 +5,11 @@ description = "Utility scripts for chain-trace skill"
 requires-python = ">=3.10"
 dependencies = [
   "cloudscraper>=1.2.71",
+  "free-solscan-api",
 ]
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+free-solscan-api = { url = "https://github.com/paoloanzn/free-solscan-api/releases/download/0.0.4/free_solscan_api-0.0.4-py3-none-any.whl" }

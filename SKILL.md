@@ -92,9 +92,88 @@ curl -s "https://lite-api.jup.ag/tokens/v2/search?query={mintAddress}"
 >
 > 限制：Jupiter Token API 适合做**可交易性发现**与基础信息补全，不等于官方认证来源；不得仅凭 Jupiter 收录就判定“官方 token”。
 
-### 2.2 EVM 链上（ETH / Base / BSC 公共 RPC）
+### 2.2 EVM 链上数据源
 
-#### 2.2.1 Ethereum (ETH) 公共 RPC
+#### 2.2.0 Blockscout API（Base/ETH 优先，完全免费）
+
+**发现：** Base 和 ETH 有独立的 Blockscout 实例，提供完整的 REST API，无需 API key。
+
+**Base Blockscout:** `https://base.blockscout.com/api/v2`
+**ETH Blockscout:** `https://eth.blockscout.com/api/v2`
+
+**使用方式：**
+```python
+from scripts.evm_explorer_client import EVMExplorerClient
+
+# Base 链（优先 Blockscout）
+client = EVMExplorerClient(chain="base")
+
+# 代币信息（含价格、持有者数、市值）
+token = client.token_info("0x4200000000000000000000000000000000000006")
+
+# 代币持有者列表
+holders = client.token_holders("0x4200000000000000000000000000000000000006")
+
+# 代币转账记录
+transfers = client.token_transfers("0x4200000000000000000000000000000000000006")
+
+# 地址信息
+addr = client.address_info("0x...")
+
+# 地址交易
+txs = client.address_transactions("0x...")
+
+# 链统计
+stats = client.stats()
+```
+
+**CLI 测试：**
+```bash
+cd ~/.claude/skills/chain-trace
+
+# Base 代币信息
+uv run python scripts/evm_explorer_client.py --chain base --token 0x4200000000000000000000000000000000000006 --method info
+
+# Base 代币持有者
+uv run python scripts/evm_explorer_client.py --chain base --token 0x4200000000000000000000000000000000000006 --method holders
+
+# BSC 搜索（用 searchHandler）
+uv run python scripts/evm_explorer_client.py --chain bsc --address 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c --method search
+```
+
+**Blockscout API 端点：**
+- `/tokens/{address}` - 代币信息
+- `/tokens/{address}/holders` - 持有者列表
+- `/tokens/{address}/transfers` - 转账记录
+- `/addresses/{address}` - 地址信息
+- `/addresses/{address}/transactions` - 地址交易
+- `/transactions/{hash}` - 交易详情
+- `/blocks/{number}` - 区块信息
+- `/stats` - 链统计
+
+---
+
+#### 2.2.1 Etherscan searchHandler（BSC/Base 备选，免费）
+
+**发现：** BSCScan/BaseScan 的 `/searchHandler` 端点返回 JSON，无需认证。
+
+```bash
+# BSC 搜索
+curl -s "https://bscscan.com/searchHandler?term=0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c&filterby=0" \
+  -H "X-Requested-With: XMLHttpRequest"
+
+# Base 搜索
+curl -s "https://basescan.org/searchHandler?term=0x4200000000000000000000000000000000000006&filterby=0" \
+  -H "X-Requested-With: XMLHttpRequest"
+```
+
+**返回数据：** 代币名称、价格、官网、验证状态等基础信息。
+
+**限制：** 只能搜索，不能获取持有者、转账等详细数据。
+
+---
+
+#### 2.2.2 Ethereum (ETH) 公共 RPC
 
 候选池（按稳定性优先，需先探测可用性）：
 
@@ -197,7 +276,69 @@ curl -s -X POST "{evmRpc}" \
 # BSC  -> https://bsc-dataseed.binance.org
 ```
 
-### 2.3 Solana 链上（公共 RPC）
+### 2.3 Solana 链上数据源
+
+#### 2.3.0 Solscan 逆向 API（优先，$200/月 → $0）
+
+**来源：** https://github.com/paoloanzn/free-solscan-api
+
+通过逆向 Solscan 网站内部 API 实现免费访问，数据比公共 RPC 更丰富。
+
+**使用方式：**
+```python
+from scripts.solscan_client import SolscanClient
+
+client = SolscanClient(prefer_solscan=True)
+
+# 交易详情
+tx = client.transaction("57YB5kSKyBqFqLtmnzJKn3ZJuGsaMKDuJaKoZKHZJqU3...")
+
+# 地址交易列表
+txs = client.transactions("地址", page=1, page_size=40)
+
+# 代币持有者（公共 RPC 无此功能）
+holders = client.token_holders("mint地址", page=1, page_size=100)
+
+# 转账记录
+transfers = client.transfers("地址", remove_spam=True)
+
+# DeFi 活动
+defi = client.defi_activities("地址")
+
+# 钱包投资组合
+portfolio = client.portfolio("地址")
+
+# 代币数据（价格、市值等）
+token = client.token_data("mint地址")
+```
+
+**CLI 测试：**
+```bash
+cd ~/.claude/skills/chain-trace
+
+# 代币数据
+uv run python scripts/solscan_client.py --mint So11111111111111111111111111111111111111112 --method token_data
+
+# 账户信息
+uv run python scripts/solscan_client.py --address <地址> --method account_info
+
+# 持有者列表
+uv run python scripts/solscan_client.py --mint <代币地址> --method token_holders
+
+# 禁用 Solscan，仅用公共 RPC
+uv run python scripts/solscan_client.py --address <地址> --method account_info --no-solscan
+```
+
+**优势：**
+- 无需 API key，无速率限制（相对宽松）
+- 提供 `token_holders`、`defi_activities`、`portfolio` 等公共 RPC 无法获取的数据
+- 自动降级：Solscan 失败时回退到公共 RPC
+
+**注意：** 此方法违反 Solscan ToS，仅用于研究/取证目的。
+
+---
+
+#### 2.3.1 公共 RPC（降级备选）
 
 候选池（按稳定性优先，需先探测可用性）：
 
