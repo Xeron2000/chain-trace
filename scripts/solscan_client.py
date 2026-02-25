@@ -70,13 +70,20 @@ class SolscanClient:
         return self._rpc_get_account_info(address)
 
     def token_holders(self, mint: str, page: int = 1, page_size: int = 100) -> Optional[Dict[str, Any]]:
-        """获取代币持有者列表"""
+        """获取代币持有者列表
+
+        注意：Solscan 逆向 API 的 token_holders 端点当前不可用。
+        降级方案：使用 token_holders_total() 获取总数，或使用 getTokenLargestAccounts RPC。
+        """
         if self.prefer_solscan:
             try:
                 return self._router.token_holders(mint, page=page, page_size=page_size)
             except Exception as e:
                 print(f"[Solscan] token_holders failed: {e}")
-        return None  # 公共 RPC 无此功能
+                print(f"[Solscan] Fallback: Use token_holders_total() for count or RPC getTokenLargestAccounts")
+
+        # 降级：尝试 RPC getTokenLargestAccounts（返回 Top 20）
+        return self._rpc_get_largest_accounts(mint)
 
     def token_holders_total(self, mint: str) -> Optional[int]:
         """获取代币持有者总数"""
@@ -216,6 +223,16 @@ class SolscanClient:
     def _rpc_get_token_supply(self, mint: str) -> Optional[Dict[str, Any]]:
         supply = self._rpc_call("getTokenSupply", [mint])
         return {"supply": supply} if supply else None
+
+    def _rpc_get_largest_accounts(self, mint: str) -> Optional[Dict[str, Any]]:
+        """获取代币最大持有者（Top 20）"""
+        result = self._rpc_call("getTokenLargestAccounts", [mint])
+        if result and "value" in result:
+            return {
+                "accounts": result["value"],
+                "note": "RPC fallback: Top 20 holders only (Solscan token_holders endpoint unavailable)"
+            }
+        return None
 
 
 # ========== CLI 测试 ==========

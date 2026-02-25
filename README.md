@@ -25,13 +25,18 @@ Zero API keys required. Uses reversed premium APIs and public data sources to pr
 
 ### Solana
 **Priority 1: Reversed Solscan API** ($200/mo → **$0**)
-- Token holders, DeFi activities, portfolio data
+- ✅ Token price, market cap (`token_data`)
+- ✅ Holder count (`token_holders_total`)
+- ✅ Balance history (`balance_history`)
+- ❌ **Holder list unavailable** (`token_holders` endpoint fails)
+- ❌ Transfers, DeFi activities, portfolio (endpoints currently broken)
 - Based on [paoloanzn/free-solscan-api](https://github.com/paoloanzn/free-solscan-api)
 - Auto-fallback to public RPC on failure
 
 **Priority 2: Public RPC**
 - `api.mainnet-beta.solana.com` + 5 backup endpoints
 - Multi-endpoint rotation with rate-limit handling
+- Fallback: `getTokenLargestAccounts` (Top 20 holders only)
 
 ### Base / ETH
 **Priority 1: Blockscout API** (Free, no key)
@@ -272,6 +277,33 @@ Red Flags: 0/8 ✅
 [dependencies]
 free-solscan-api = { url = "https://github.com/paoloanzn/free-solscan-api/releases/download/0.0.4/free_solscan_api-0.0.4-py3-none-any.whl" }
 ```
+
+---
+
+## ⚠️ Known Limitations
+
+### Solscan Reversed API
+- ❌ **`token_holders` endpoint unavailable** - Cannot fetch full holder list
+  - Workaround: Use `token_holders_total()` for count only
+  - Fallback: RPC `getTokenLargestAccounts` (Top 20 only)
+- ❌ **`transfers` endpoint broken** - Cannot fetch transfer history
+- ❌ **`defi_activities` endpoint broken** - Cannot fetch DeFi activity
+- ❌ **`portfolio` endpoint broken** - Cannot fetch wallet portfolio
+- ✅ Working: `token_data`, `token_holders_total`, `account_info`, `balance_history`
+
+### Twitter/X Data (x-tweet-fetcher)
+- ⚠️ **Single tweet**: Requires full tweet URL (not just username)
+  - ✅ Works: `--url https://x.com/user/status/123456`
+  - ❌ Fails: `--user username` (for single tweet)
+- ⚠️ **User timeline**: Requires Camofox browser automation running on `localhost:9377`
+  - Install: `openclaw plugins install @askjo/camofox-browser`
+  - Or: Manual setup via [camofox-browser](https://github.com/jo-inc/camofox-browser)
+- ⚠️ **Replies**: Also requires Camofox
+
+### Rate Limits
+- Public RPCs may return 429/403 under heavy load
+- Automatic retry with exponential backoff
+- Multi-endpoint rotation helps but doesn't eliminate limits
 
 ---
 
