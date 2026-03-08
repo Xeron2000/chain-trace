@@ -1,3 +1,8 @@
+---
+name: chain-trace
+description: Use when investigating a crypto token, contract, or wallet across ETH, Base, BSC, or Solana for suspicious holder clusters, funding paths, LP or permission risks, and related website or X/Twitter evidence using public no-key sources.
+---
+
 # Chain Trace - 公共接口版多链土狗深度取证
 
 仅使用**公开接口（无需 API key）**，深度追踪 ETH / Base / BSC / Solana 链上资金流 + 链下网站与 Twitter(X) 全量关联线索。
@@ -792,8 +797,8 @@ curl -s "https://urlscan.io/api/v1/search/?q=domain:{domain}"
 1) **x-tweet-fetcher（推荐，零 key）**
 ```bash
 # 单条推文
-X_FETCHER="$HOME/.agents/skills/x-tweet-fetcher/scripts/fetch_tweet.py"
-[ -f "$X_FETCHER" ] || X_FETCHER="$HOME/.claude/skills/x-tweet-fetcher/scripts/fetch_tweet.py"
+X_FETCHER="$HOME/.agents/skills/x-tweet-fetcher/scripts/fetch_twitter.py"
+[ -f "$X_FETCHER" ] || X_FETCHER="$HOME/.claude/skills/x-tweet-fetcher/scripts/fetch_twitter.py"
 python3 "$X_FETCHER" --url "https://x.com/{user}/status/{id}" --text-only
 
 # 用户时间线（需 Camofox）
