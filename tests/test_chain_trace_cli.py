@@ -79,35 +79,32 @@ class ChainTraceCliTests(unittest.TestCase):
         class FakeSolscan:
             def account_info(self, mint: str):
                 return {
-                    'tokenInfo': {
-                        'decimals': 6,
-                        'freezeAuthority': None,
-                        'tokenAuthority': None,
-                        'creator': 'Creator111',
-                        'ownExtensions': {
-                            'website': 'https://www.molt.id/',
-                            'twitter': 'https://x.com/moltdotid',
+                    'data': {
+                        'parsed': {
+                            'type': 'mint',
+                            'info': {
+                                'decimals': 6,
+                                'freezeAuthority': None,
+                                'mintAuthority': 'Auth1111111111111111111111111111111111111',
+                                'supply': '975289876890878',
+                            },
                         },
-                    },
-                    'metadata': {
-                        'data': {
-                            'name': 'MoltID',
-                            'symbol': 'MOLTID',
-                        }
                     },
                 }
 
-            def token_holders_total(self, mint: str):
-                return {'holders': 876, 'supply': 975289876890878}
-
             def token_data(self, mint: str):
-                return {}
+                return {
+                    'supply': '975289876.890878',
+                    'decimals': 6,
+                }
 
             def token_holders(self, mint: str, page: int = 1, page_size: int = 100):
                 return None
 
         tracer.explorer = FakeSolscan()
         tracer._fetch_solana_market_info = lambda mint: {
+            'name': 'MoltID',
+            'symbol': 'MOLTID',
             'price_usd': 0.000718,
             'market_cap_usd': 699530.6,
             'fdv_usd': 700280.25,
@@ -119,9 +116,8 @@ class ChainTraceCliTests(unittest.TestCase):
 
         self.assertEqual(info['name'], 'MoltID')
         self.assertEqual(info['symbol'], 'MOLTID')
-        self.assertEqual(info['holder_count'], 876)
         self.assertAlmostEqual(info['price_usd'], 0.000718)
-        self.assertIsNone(info['mint_authority'])
+        self.assertEqual(info['mint_authority'], 'Auth1111111111111111111111111111111111111')
         self.assertIsNone(info['freeze_authority'])
 
     def test_missing_holder_data_lowers_confidence(self):

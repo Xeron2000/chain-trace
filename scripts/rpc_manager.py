@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class RPCError(Exception):
@@ -46,7 +46,7 @@ class RPCEndpoint:
         """Check if endpoint is available (not in cooldown)"""
         if self.cooldown_until is None:
             return True
-        return datetime.utcnow() >= self.cooldown_until
+        return datetime.now(timezone.utc) >= self.cooldown_until
 
     def mark_success(self, response_time: float):
         """Mark successful request"""
@@ -66,7 +66,7 @@ class RPCEndpoint:
 
         # Exponential backoff: 30s, 60s, 120s, 240s, ...
         cooldown_seconds = cooldown_base * (2 ** min(self.consecutive_failures - 1, 5))
-        self.cooldown_until = datetime.utcnow() + timedelta(seconds=cooldown_seconds)
+        self.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
 
 
 class Chain(Enum):
@@ -82,14 +82,13 @@ RPC_POOLS = {
     Chain.ETH: [
         ("https://cloudflare-eth.com", 1),
         ("https://ethereum-rpc.publicnode.com", 1),
-        ("https://eth.llamarpc.com", 1),
+        ("https://rpc.flashbots.net", 2),
         ("https://eth.drpc.org", 2),
         ("https://1rpc.io/eth", 2),
     ],
     Chain.BASE: [
         ("https://mainnet.base.org", 1),
         ("https://base-rpc.publicnode.com", 1),
-        ("https://base.llamarpc.com", 1),
         ("https://base.drpc.org", 2),
         ("https://1rpc.io/base", 2),
     ],
@@ -111,8 +110,6 @@ RPC_POOLS = {
         ("https://api.mainnet-beta.solana.com", 1),
         ("https://api.mainnet.solana.com", 1),
         ("https://solana-rpc.publicnode.com", 2),
-        ("https://solana.drpc.org", 2),
-        ("https://solana.api.onfinality.io/public", 2),
     ],
 }
 

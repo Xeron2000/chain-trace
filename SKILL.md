@@ -1,6 +1,6 @@
 ---
 name: chain-trace
-description: Use when investigating a crypto token, contract, or wallet across ETH, Base, BSC, or Solana for suspicious holder clusters, funding paths, LP or permission risks, and related website or X/Twitter evidence using public no-key sources.
+description: Use when investigating a crypto token, contract, or wallet across ETH, Base, BSC, or Solana for suspicious holder clusters, funding paths, LP or permission risks, and related website or X/Twitter evidence using only public no-key sources (DefiLlama, Blockscout, GeckoTerminal, GoPlus, Jupiter, Solana/EVM RPC).
 ---
 
 # Chain Trace - 公共接口版多链土狗深度取证
@@ -72,6 +72,17 @@ description: Use when investigating a crypto token, contract, or wallet across E
 ## Phase 2: 公共数据源（无 key）
 
 ### 2.1 市场与流动性（多链）
+
+> 📌 首推 **DefiLlama** — 无需 key，support `ethereum:` / `bsc:` / `base:` / `solana:`，可批量查价。
+
+0) **DefiLlama（首推，零依赖）**
+```bash
+# 单地址
+curl -s "https://coins.llama.fi/prices/current/ethereum:0xdAC17F958D2ee523a2206206994597C13D831ec7"
+
+# 批量（逗号分隔）
+curl -s "https://coins.llama.fi/prices/current/solana:So11111111111111111111111111111111111111112,bsc:0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"
+```
 
 1) **DexScreener**
 ```bash
@@ -158,23 +169,10 @@ uv run python scripts/evm_explorer_client.py --chain bsc --address 0xbb4CdB9CBd3
 
 ---
 
-#### 2.2.1 Etherscan searchHandler（BSC/Base 备选，免费）
+#### 2.2.1 Etherscan searchHandler（BSC/Base，已失效 403）
 
-**发现：** BSCScan/BaseScan 的 `/searchHandler` 端点返回 JSON，无需认证。
-
-```bash
-# BSC 搜索
-curl -s "https://bscscan.com/searchHandler?term=0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c&filterby=0" \
-  -H "X-Requested-With: XMLHttpRequest"
-
-# Base 搜索
-curl -s "https://basescan.org/searchHandler?term=0x4200000000000000000000000000000000000006&filterby=0" \
-  -H "X-Requested-With: XMLHttpRequest"
-```
-
-**返回数据：** 代币名称、价格、官网、验证状态等基础信息。
-
-**限制：** 只能搜索，不能获取持有者、转账等详细数据。
+**状态：** `bscscan.com` 和 `basescan.org` 的 `/searchHandler` 端点已被 Cloudflare 拦截，返回 403。
+BSC 链 fallback 到 `eth_call` RPC 查询代币元数据（symbol/name/decimals）。
 
 ---
 
@@ -283,17 +281,16 @@ curl -s -X POST "{evmRpc}" \
 
 ### 2.3 Solana 链上数据源
 
-#### 2.3.0 Solscan 逆向 API（优先，$200/月 → $0）
+#### 2.3.0 Solana 公共 RPC（Solscan 逆向已不可用）
 
-**来源：** https://github.com/paoloanzn/free-solscan-api
+**状态：** Solscan 内部 API（`public-api.solscan.io` / `api-v2.solscan.io`）已被 Cloudflare 彻底拦截（401/403）。`free-solscan-api` 包已移除。
 
-通过逆向 Solscan 网站内部 API 实现免费访问，数据比公共 RPC 更丰富。
+当前 Solana 客户端仅使用公共 RPC：
 
-**使用方式：**
 ```python
 from scripts.solscan_client import SolscanClient
 
-client = SolscanClient(prefer_solscan=True)
+client = SolscanClient()
 
 # 交易详情
 tx = client.transaction("57YB5kSKyBqFqLtmnzJKn3ZJuGsaMKDuJaKoZKHZJqU3...")
@@ -301,45 +298,27 @@ tx = client.transaction("57YB5kSKyBqFqLtmnzJKn3ZJuGsaMKDuJaKoZKHZJqU3...")
 # 地址交易列表
 txs = client.transactions("地址", page=1, page_size=40)
 
-# 代币持有者（公共 RPC 无此功能）
-holders = client.token_holders("mint地址", page=1, page_size=100)
-
-# 转账记录
-transfers = client.transfers("地址", remove_spam=True)
-
-# DeFi 活动
-defi = client.defi_activities("地址")
-
-# 钱包投资组合
-portfolio = client.portfolio("地址")
-
-# 代币数据（价格、市值等）
+# 代币供应量
 token = client.token_data("mint地址")
+
+# Top 20 持有者（仅 getTokenLargestAccounts）
+holders = client.token_holders("mint地址")
+
+# 批量账户信息（getMultipleAccounts）
+accounts = client.accounts_info(["addr1", "addr2", ...])
 ```
 
 **CLI 测试：**
 ```bash
-cd ~/.claude/skills/chain-trace
-
-# 代币数据
 uv run python scripts/solscan_client.py --mint So11111111111111111111111111111111111111112 --method token_data
-
-# 账户信息
-uv run python scripts/solscan_client.py --address <地址> --method account_info
-
-# 持有者列表
 uv run python scripts/solscan_client.py --mint <代币地址> --method token_holders
-
-# 禁用 Solscan，仅用公共 RPC
-uv run python scripts/solscan_client.py --address <地址> --method account_info --no-solscan
+uv run python scripts/solscan_client.py --addresses addr1 addr2 --method accounts_info
 ```
 
-**优势：**
-- 无需 API key，无速率限制（相对宽松）
-- 提供 `token_holders`、`defi_activities`、`portfolio` 等公共 RPC 无法获取的数据
-- 自动降级：Solscan 失败时回退到公共 RPC
-
-**注意：** 此方法违反 Solscan ToS，仅用于研究/取证目的。
+**优化：**
+- `accounts_info()` 使用 `getMultipleAccounts` 批量查询，替代单次 `getAccountInfo`
+- 指数退避 + jitter + RPC 轮换应对 429 限流
+- 热门代币的 `getTokenLargestAccounts` 可能被公开 RPC 限流，此时 holders 返回空（graceful degradation）
 
 ---
 
@@ -432,9 +411,6 @@ SOLANA_RPCS=(
   "https://api.mainnet-beta.solana.com"
   "https://api.mainnet.solana.com"
   "https://solana-rpc.publicnode.com"
-  "https://solana.drpc.org"
-  "https://solana.api.onfinality.io/public"
-  "https://endpoints.omniatech.io/v1/sol/mainnet/public"
 )
 
 # --- Runtime state ---

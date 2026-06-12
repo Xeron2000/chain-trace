@@ -31,11 +31,12 @@ npx skills add https://github.com/Xeron2000/chain-trace
 
 ## Data Sources
 
-- **Solana**: Reversed Solscan API + Public RPC
+- **Market (all chains)**: DefiLlama (no key), DexScreener, GeckoTerminal
 - **Base/ETH**: Blockscout API + Public RPC
-- **BSC**: Etherscan searchHandler + Public RPC
-- **Market**: DexScreener, GeckoTerminal, Jupiter
+- **BSC**: Public RPC (BSCScan searchHandler 403'd)
+- **Solana**: Public RPC (Solscan API deprecated)
 - **Security**: GoPlus, Honeypot.is
+- **No API keys required** — all sources are public/free
 
 ## Standalone Scripts
 

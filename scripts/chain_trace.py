@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 # Import modules
@@ -26,6 +26,7 @@ from scripts.solscan_client import SolscanClient
 from scripts.holder_analyzer import HolderAnalyzer, Holder
 from scripts.suspicious_detector import SuspiciousDetector
 from scripts.visualizer import Visualizer
+from scripts.market_data import MarketDataClient
 
 
 class ChainTrace:
@@ -51,6 +52,7 @@ class ChainTrace:
         elif chain == "solana":
             self.explorer = SolscanClient(prefer_solscan=True)
 
+        self.market_data = MarketDataClient()
         self.results = {}
     
     def analyze(self, target: str) -> Dict[str, Any]:
@@ -109,32 +111,21 @@ class ChainTrace:
             return info or {}
         if self.chain == "solana":
             info: Dict[str, Any] = {}
-
             account_info = getattr(self.explorer, 'account_info', lambda _addr: {})(address) or {}
-            token_info = account_info.get('tokenInfo', {})
-            metadata = account_info.get('metadata', {}).get('data', {})
-            own_extensions = token_info.get('ownExtensions', {})
 
+            parsed = (account_info.get('data') or {}).get('parsed') or {}
+            mint_info = (parsed.get('info') or {}) if parsed.get('type') == 'mint' else {}
             info.update({
-                'name': metadata.get('name'),
-                'symbol': metadata.get('symbol'),
-                'decimals': token_info.get('decimals'),
-                'mint_authority': token_info.get('tokenAuthority'),
-                'freeze_authority': token_info.get('freezeAuthority'),
-                'creator': token_info.get('creator'),
-                'website': own_extensions.get('website'),
-                'twitter': own_extensions.get('twitter'),
-                'description': own_extensions.get('description'),
-                'created_tx': token_info.get('created_tx'),
-                'first_mint_tx': token_info.get('first_mint_tx'),
+                'decimals': mint_info.get('decimals'),
+                'mint_authority': mint_info.get('mintAuthority'),
+                'freeze_authority': mint_info.get('freezeAuthority'),
+                'supply_raw': mint_info.get('supply'),
             })
 
-            holder_stats = getattr(self.explorer, 'token_holders_total', lambda _addr: None)(address)
-            if isinstance(holder_stats, dict):
-                info['holder_count'] = holder_stats.get('holders')
-                info['supply_raw'] = holder_stats.get('supply')
-            elif holder_stats is not None:
-                info['holder_count'] = holder_stats
+            token_data = getattr(self.explorer, 'token_data', lambda _addr: None)(address)
+            if token_data:
+                info.setdefault('supply_raw', token_data.get('supply'))
+                info.setdefault('decimals', token_data.get('decimals'))
 
             market_info = self._fetch_solana_market_info(address)
             info.update(market_info)
@@ -143,39 +134,46 @@ class ChainTrace:
         return {}
 
     def _fetch_solana_market_info(self, address: str) -> Dict[str, Any]:
-        """Fetch Solana token market info from GeckoTerminal."""
-        import requests
+        result: Dict[str, Any] = {'market_source': 'defillama'}
 
-        url = f"https://api.geckoterminal.com/api/v2/networks/solana/tokens/{address}"
+        market_info = self.market_data.get_price("solana", address)
+        if market_info:
+            result['decimals'] = market_info.get('decimals')
+            result['symbol'] = market_info.get('symbol')
+            result['price_usd'] = market_info.get('price')
+
         try:
-            response = requests.get(
-                url,
+            import requests
+            resp = requests.get(
+                f"https://api.geckoterminal.com/api/v2/networks/solana/tokens/{address}",
                 timeout=20,
-                headers={
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'application/json',
-                },
+                headers={'User-Agent': 'chain-trace/0.2', 'Accept': 'application/json'},
             )
-            response.raise_for_status()
-            payload = response.json().get('data', {}).get('attributes', {})
-            volume = payload.get('volume_usd', {}) or {}
-            return {
-                'name': payload.get('name'),
-                'symbol': payload.get('symbol'),
-                'decimals': payload.get('decimals'),
-                'price_usd': float(payload['price_usd']) if payload.get('price_usd') is not None else None,
-                'market_cap_usd': float(payload['market_cap_usd']) if payload.get('market_cap_usd') is not None else None,
-                'fdv_usd': float(payload['fdv_usd']) if payload.get('fdv_usd') is not None else None,
-                'liquidity_usd': float(payload['total_reserve_in_usd']) if payload.get('total_reserve_in_usd') is not None else None,
-                'volume_24h_usd': float(volume['h24']) if volume.get('h24') is not None else None,
-                'total_supply': float(payload['normalized_total_supply']) if payload.get('normalized_total_supply') is not None else None,
-                'coingecko_coin_id': payload.get('coingecko_coin_id'),
-                'image_url': payload.get('image_url'),
-                'market_source': 'geckoterminal',
-            }
-        except Exception as e:
-            print(f"[ChainTrace] Solana market fetch failed: {e}")
-            return {}
+            resp.raise_for_status()
+            attrs = resp.json().get('data', {}).get('attributes', {})
+            volume = attrs.get('volume_usd', {}) or {}
+            result.setdefault('name', attrs.get('name'))
+            result.setdefault('symbol', attrs.get('symbol'))
+            result.setdefault('decimals', attrs.get('decimals'))
+            if attrs.get('price_usd') is not None:
+                result['price_usd'] = float(attrs['price_usd'])
+            if attrs.get('total_reserve_in_usd') is not None:
+                result['liquidity_usd'] = float(attrs['total_reserve_in_usd'])
+            if volume.get('h24') is not None:
+                result['volume_24h_usd'] = float(volume['h24'])
+            if attrs.get('market_cap_usd') is not None:
+                result['market_cap_usd'] = float(attrs['market_cap_usd'])
+            if attrs.get('fdv_usd') is not None:
+                result['fdv_usd'] = float(attrs['fdv_usd'])
+            if attrs.get('coingecko_coin_id'):
+                result['coingecko_coin_id'] = attrs['coingecko_coin_id']
+            if attrs.get('image_url'):
+                result['image_url'] = attrs['image_url']
+            result['market_source'] = 'geckoterminal+defillama'
+        except Exception:
+            pass
+
+        return result
     
     def _fetch_holders(self, address: str) -> list:
         """Fetch holder list"""
@@ -329,7 +327,7 @@ class ChainTrace:
         lines.append(f"Chain Trace Report - {self.chain.upper()}")
         lines.append("=" * 70)
         lines.append(f"Mode: {self.mode}")
-        lines.append(f"Timestamp: {datetime.utcnow().isoformat()}Z")
+        lines.append(f"Timestamp: {datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}")
         lines.append("")
 
         # Use visualizer for rich output

@@ -14,9 +14,6 @@ DEFAULT_SOLANA_ENDPOINTS = [
     "https://api.mainnet-beta.solana.com",
     "https://api.mainnet.solana.com",
     "https://solana-rpc.publicnode.com",
-    "https://solana.drpc.org",
-    "https://solana.api.onfinality.io/public",
-    "https://endpoints.omniatech.io/v1/sol/mainnet/public",
 ]
 
 DEFAULT_BSC_ENDPOINTS = [
@@ -24,40 +21,27 @@ DEFAULT_BSC_ENDPOINTS = [
     "https://bsc-dataseed1.binance.org",
     "https://bsc-dataseed2.binance.org",
     "https://bsc-dataseed3.binance.org",
-    "https://bsc-dataseed4.binance.org",
     "https://bsc-dataseed.bnbchain.org",
     "https://bsc-dataseed1.bnbchain.org",
-    "https://bsc-dataseed2.bnbchain.org",
-    "https://bsc-dataseed3.bnbchain.org",
-    "https://bsc-dataseed4.bnbchain.org",
     "https://bsc-dataseed-public.bnbchain.org",
     "https://bsc-dataseed.defibit.io",
     "https://bsc-dataseed1.defibit.io",
-    "https://bsc-dataseed2.defibit.io",
-    "https://bsc-dataseed.ninicoin.io",
-    "https://bsc-dataseed1.ninicoin.io",
-    "https://bsc-dataseed2.ninicoin.io",
-    "https://bsc-dataseed.nariox.org",
     "https://bsc.nodereal.io",
     "https://1rpc.io/bnb",
 ]
 
 DEFAULT_ETH_ENDPOINTS = [
     "https://ethereum-rpc.publicnode.com",
-    "https://eth.llamarpc.com",
     "https://cloudflare-eth.com",
     "https://eth.drpc.org",
     "https://1rpc.io/eth",
-    "https://rpc.ankr.com/eth",
 ]
 
 DEFAULT_BASE_ENDPOINTS = [
     "https://mainnet.base.org",
     "https://base-rpc.publicnode.com",
-    "https://base.llamarpc.com",
     "https://base.drpc.org",
     "https://1rpc.io/base",
-    "https://rpc.ankr.com/base",
 ]
 
 CF_BLOCK_PATTERNS = (

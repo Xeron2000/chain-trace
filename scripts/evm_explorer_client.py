@@ -41,7 +41,6 @@ CHAINS = {
         rpcs=[
             "https://bsc-dataseed.binance.org",
             "https://bsc-dataseed1.binance.org",
-            "https://bsc-dataseed2.binance.org",
             "https://bsc-dataseed.bnbchain.org",
             "https://bsc-rpc.publicnode.com",
         ]
@@ -50,11 +49,10 @@ CHAINS = {
         name="Base",
         chain_id=8453,
         explorer_url="https://basescan.org",
-        blockscout_url="https://base.blockscout.com",  # 完整 API
+        blockscout_url="https://base.blockscout.com",
         rpcs=[
             "https://mainnet.base.org",
             "https://base-rpc.publicnode.com",
-            "https://base.llamarpc.com",
             "https://base.drpc.org",
         ]
     ),
@@ -66,7 +64,7 @@ CHAINS = {
         rpcs=[
             "https://cloudflare-eth.com",
             "https://ethereum-rpc.publicnode.com",
-            "https://eth.llamarpc.com",
+            "https://eth.drpc.org",
         ]
     ),
 }
@@ -193,23 +191,65 @@ class EVMExplorerClient:
         return None
 
     # ========== Etherscan searchHandler (BSC/Base) ==========
+    # NOTE: 2025年起 BSCScan/BaseScan 已对 searchHandler 返回 403（Cloudflare WAF）。
+    # 改用 RPC eth_call 代替。
 
     def _search_handler(self, query: str) -> Optional[Dict]:
-        """Etherscan searchHandler - 免费，无需 key"""
-        url = f"{self.config.explorer_url}/searchHandler?term={query}&filterby=0"
-        headers = {"X-Requested-With": "XMLHttpRequest"}
-        result = self._request(url, headers)
-
-        if result and isinstance(result, list) and len(result) > 0:
-            # 返回第一个匹配结果
-            return result[0]
-        return None
+        """searchHandler 已失效（403），降级到 RPC eth_call"""
+        return self._rpc_get_token_basic(query)
 
     def search(self, query: str) -> Optional[List[Dict]]:
-        """搜索地址/代币/交易"""
-        url = f"{self.config.explorer_url}/searchHandler?term={query}&filterby=0"
-        headers = {"X-Requested-With": "XMLHttpRequest"}
-        return self._request(url, headers)
+        return None
+
+    def _rpc_get_token_basic(self, address: str) -> Optional[Dict]:
+        """通过 RPC eth_call 获取代币基本信息"""
+        name = self._rpc_erc20_call(address, "0x06fdde03")   # name()
+        symbol = self._rpc_erc20_call(address, "0x95d89b41")  # symbol()
+        decimals = self._rpc_erc20_call(address, "0x313ce567") # decimals()
+        total_supply = self._rpc_erc20_call(address, "0x18160ddd") # totalSupply()
+
+        if not name and not symbol:
+            return None
+
+        result = {"address": address}
+        if name:
+            result["name"] = name
+        if symbol:
+            result["symbol"] = symbol
+        if decimals is not None:
+            result["decimals"] = str(decimals)
+        if total_supply is not None:
+            result["total_supply"] = str(total_supply)
+        result["source"] = f"eth_call_{self.chain}"
+        return result
+
+    def _rpc_erc20_call(self, contract: str, data: str) -> Optional[str]:
+        """执行 ERC20 eth_call，解码返回的 bytes"""
+        result = self._rpc_call("eth_call", [{"to": contract, "data": data}, "latest"])
+        if not result:
+            return None
+        raw = result[2:] if result.startswith("0x") else result
+        if not raw:
+            return None
+        # ERC20 string return: 0x20 + offset(32) + len(32) + data
+        if data == "0x313ce567":  # decimals: uint8
+            try:
+                return str(int(raw[-2:], 16)) if raw[-2:] else "0"
+            except (ValueError, IndexError):
+                return None
+        if data == "0x18160ddd":  # totalSupply: uint256
+            try:
+                return str(int(raw[-64:], 16)) if len(raw) >= 64 else None
+            except (ValueError, IndexError):
+                return None
+        # name/symbol: string
+        try:
+            length = int(raw[64:128], 16) if len(raw) >= 128 else 0
+            if length > 0 and len(raw) >= 128 + length * 2:
+                return bytes.fromhex(raw[128:128 + length * 2]).decode("utf-8", errors="replace")
+        except (ValueError, IndexError):
+            pass
+        return None
 
     # ========== 公共 RPC Fallback ==========
 

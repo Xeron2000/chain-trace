@@ -1,282 +1,170 @@
-#!/usr/bin/env python3
 """
-Solscan Client - 优先使用逆向的 $200/月 API，降级到公共 RPC
+Solana RPC Client — 完全基于公共 RPC，无外部依赖
 
-基于 https://github.com/paoloanzn/free-solscan-api 逆向工程
+优化：
+  - getMultipleAccounts 批量查 account info（替代单次 getAccountInfo）
+  - 指数退避 + jitter 应对 429
+  - getTokenSupply 作为 holder 查询的降级
 """
 
 import json
+import random
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
-try:
-    import free_solscan_api
-    SOLSCAN_AVAILABLE = True
-except ImportError:
-    SOLSCAN_AVAILABLE = False
-
-# Fallback: 公共 RPC 池
 SOLANA_RPCS = [
     "https://api.mainnet-beta.solana.com",
     "https://api.mainnet.solana.com",
     "https://solana-rpc.publicnode.com",
-    "https://solana.drpc.org",
 ]
 
 
 class SolscanClient:
-    """Solana 数据客户端，优先 Solscan 逆向 API，降级公共 RPC"""
-
     def __init__(self, prefer_solscan: bool = True):
-        self.prefer_solscan = prefer_solscan and SOLSCAN_AVAILABLE
-        self._router = None
         self._rpc_index = 0
         self._rpc_fails: Dict[str, int] = {}
 
-        if self.prefer_solscan:
-            self._router = free_solscan_api.Router(free_solscan_api.solscan_endpoints)
-
     @property
     def source(self) -> str:
-        return "solscan_reversed" if self.prefer_solscan else "public_rpc"
-
-    # ========== Solscan API 方法 ==========
-
-    def transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
-        """获取交易详情"""
-        if self.prefer_solscan:
-            try:
-                return self._router.transaction(tx_hash)
-            except Exception as e:
-                print(f"[Solscan] transaction failed: {e}, falling back to RPC")
-        return self._rpc_get_transaction(tx_hash)
-
-    def transactions(self, address: str, page: int = 1, page_size: int = 40) -> Optional[Dict[str, Any]]:
-        """获取地址交易列表"""
-        if self.prefer_solscan:
-            try:
-                return self._router.transactions(address, page=page, page_size=page_size)
-            except Exception as e:
-                print(f"[Solscan] transactions failed: {e}, falling back to RPC")
-        return self._rpc_get_signatures(address, limit=page_size)
-
-    def account_info(self, address: str) -> Optional[Dict[str, Any]]:
-        """获取账户信息"""
-        if self.prefer_solscan:
-            try:
-                return self._router.account_info(address)
-            except Exception as e:
-                print(f"[Solscan] account_info failed: {e}, falling back to RPC")
-        return self._rpc_get_account_info(address)
-
-    def token_holders(self, mint: str, page: int = 1, page_size: int = 100) -> Optional[Dict[str, Any]]:
-        """获取代币持有者列表
-
-        注意：Solscan 逆向 API 的 token_holders 端点当前不可用。
-        降级方案：使用 token_holders_total() 获取总数，或使用 getTokenLargestAccounts RPC。
-        """
-        if self.prefer_solscan:
-            try:
-                return self._router.token_holders(mint, page=page, page_size=page_size)
-            except Exception as e:
-                print(f"[Solscan] token_holders failed: {e}")
-                print(f"[Solscan] Fallback: Use token_holders_total() for count or RPC getTokenLargestAccounts")
-
-        # 降级：尝试 RPC getTokenLargestAccounts（返回 Top 20）
-        return self._rpc_get_largest_accounts(mint)
-
-    def token_holders_total(self, mint: str) -> Optional[int]:
-        """获取代币持有者总数"""
-        if self.prefer_solscan:
-            try:
-                return self._router.token_holders_total(mint)
-            except Exception as e:
-                print(f"[Solscan] token_holders_total failed: {e}")
-        return None
-
-    def transfers(self, address: str, page: int = 1, page_size: int = 100,
-                  remove_spam: bool = True, exclude_amount_zero: bool = True) -> Optional[Dict[str, Any]]:
-        """获取转账记录"""
-        if self.prefer_solscan:
-            try:
-                return self._router.transfers(
-                    address,
-                    remove_spam=remove_spam,
-                    exclude_amount_zero=exclude_amount_zero,
-                    page=page,
-                    page_size=page_size
-                )
-            except Exception as e:
-                print(f"[Solscan] transfers failed: {e}")
-        return None
-
-    def defi_activities(self, address: str, page: int = 1, page_size: int = 100) -> Optional[Dict[str, Any]]:
-        """获取 DeFi 活动"""
-        if self.prefer_solscan:
-            try:
-                return self._router.defi_activities(address, page=page, page_size=page_size)
-            except Exception as e:
-                print(f"[Solscan] defi_activities failed: {e}")
-        return None
-
-    def portfolio(self, address: str, token_type: str = "token",
-                  page: int = 1, page_size: int = 100, hide_zero: bool = True) -> Optional[Dict[str, Any]]:
-        """获取钱包投资组合"""
-        if self.prefer_solscan:
-            try:
-                return self._router.portfolio(
-                    address,
-                    type=token_type,
-                    page=page,
-                    page_size=page_size,
-                    hide_zero=hide_zero
-                )
-            except Exception as e:
-                print(f"[Solscan] portfolio failed: {e}")
-        return None
-
-    def balance_history(self, address: str) -> Optional[Dict[str, Any]]:
-        """获取余额历史"""
-        if self.prefer_solscan:
-            try:
-                return self._router.balance_history(address)
-            except Exception as e:
-                print(f"[Solscan] balance_history failed: {e}")
-        return None
-
-    def top_address_transfers(self, address: str, range_days: int = 7) -> Optional[Dict[str, Any]]:
-        """获取地址的 Top 转账"""
-        if self.prefer_solscan:
-            try:
-                return self._router.top_address_transfers(address, range_days=range_days)
-            except Exception as e:
-                print(f"[Solscan] top_address_transfers failed: {e}")
-        return None
-
-    def token_data(self, mint: str = "So11111111111111111111111111111111111111112") -> Optional[Dict[str, Any]]:
-        """获取代币数据"""
-        if self.prefer_solscan:
-            try:
-                return self._router.token_data(token_address=mint)
-            except Exception as e:
-                print(f"[Solscan] token_data failed: {e}")
-        return self._rpc_get_token_supply(mint)
-
-    # ========== 公共 RPC Fallback ==========
+        return "public_rpc"
 
     def _get_rpc(self) -> str:
-        """轮换获取可用 RPC"""
         for _ in range(len(SOLANA_RPCS)):
             rpc = SOLANA_RPCS[self._rpc_index]
             if self._rpc_fails.get(rpc, 0) < 3:
                 return rpc
             self._rpc_index = (self._rpc_index + 1) % len(SOLANA_RPCS)
-        # 全部失败，重置
         self._rpc_fails.clear()
         return SOLANA_RPCS[0]
 
-    def _rpc_call(self, method: str, params: list) -> Optional[Dict[str, Any]]:
-        """执行 RPC 调用"""
+    def _rpc_call(self, method: str, params: list) -> Optional[Any]:
         import urllib.request
-
         rpc = self._get_rpc()
-        payload = json.dumps({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": method,
-            "params": params
-        }).encode()
-
-        for attempt in range(3):
+        payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+        for attempt in range(4):
             try:
-                req = urllib.request.Request(
-                    rpc,
-                    data=payload,
-                    headers={"Content-Type": "application/json"}
-                )
+                req = urllib.request.Request(rpc, data=payload, headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=12) as resp:
                     result = json.loads(resp.read().decode())
                     if "result" in result:
                         self._rpc_fails[rpc] = 0
                         return result["result"]
                     if "error" in result:
-                        print(f"[RPC] {method} error: {result['error']}")
+                        code = result["error"].get("code", 0)
+                        if code == 429:
+                            self._rpc_fails[rpc] = self._rpc_fails.get(rpc, 0) + 1
+                            if attempt < 3:
+                                sleep = (2 ** attempt) + random.random()
+                                time.sleep(sleep)
+                                self._rpc_index = (self._rpc_index + 1) % len(SOLANA_RPCS)
+                                rpc = self._get_rpc()
+                                continue
                         return None
             except Exception as e:
                 self._rpc_fails[rpc] = self._rpc_fails.get(rpc, 0) + 1
-                if attempt < 2:
-                    time.sleep(1 << attempt)
+                if attempt < 3:
+                    time.sleep((1 << attempt) + random.random())
                     self._rpc_index = (self._rpc_index + 1) % len(SOLANA_RPCS)
                     rpc = self._get_rpc()
         return None
 
-    def _rpc_get_transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
+    def transaction(self, tx_hash: str) -> Optional[Dict[str, Any]]:
         return self._rpc_call("getTransaction", [tx_hash, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}])
 
-    def _rpc_get_signatures(self, address: str, limit: int = 50) -> Optional[Dict[str, Any]]:
-        sigs = self._rpc_call("getSignaturesForAddress", [address, {"limit": limit}])
+    def transactions(self, address: str, page: int = 1, page_size: int = 40) -> Optional[Dict[str, Any]]:
+        sigs = self._rpc_call("getSignaturesForAddress", [address, {"limit": min(page_size, 100)}])
         return {"signatures": sigs} if sigs else None
 
-    def _rpc_get_account_info(self, address: str) -> Optional[Dict[str, Any]]:
-        return self._rpc_call("getAccountInfo", [address, {"encoding": "jsonParsed"}])
+    def accounts_info(self, addresses: list[str]) -> dict[str, Optional[Dict[str, Any]]]:
+        if not addresses:
+            return {}
+        result = self._rpc_call("getMultipleAccounts", [addresses, {"encoding": "jsonParsed"}])
+        if not result or "value" not in result:
+            return {}
+        vals = result["value"] or []
+        out: dict[str, Optional[Dict[str, Any]]] = {}
+        for i, addr in enumerate(addresses):
+            v = vals[i] if i < len(vals) else None
+            out[addr] = v.get("data") if v and isinstance(v, dict) else None
+        return out
 
-    def _rpc_get_token_supply(self, mint: str) -> Optional[Dict[str, Any]]:
-        supply = self._rpc_call("getTokenSupply", [mint])
-        return {"supply": supply} if supply else None
-
-    def _rpc_get_largest_accounts(self, mint: str) -> Optional[Dict[str, Any]]:
-        """获取代币最大持有者（Top 20）"""
-        result = self._rpc_call("getTokenLargestAccounts", [mint])
+    def account_info(self, address: str) -> Optional[Dict[str, Any]]:
+        result = self._rpc_call("getAccountInfo", [address, {"encoding": "jsonParsed"}])
         if result and "value" in result:
+            return result["value"]
+        return None
+
+    def token_data(self, mint: str = "So11111111111111111111111111111111111111112") -> Optional[Dict[str, Any]]:
+        supply = self._rpc_call("getTokenSupply", [mint])
+        if supply:
             return {
-                "accounts": result["value"],
-                "note": "RPC fallback: Top 20 holders only (Solscan token_holders endpoint unavailable)"
+                "supply": supply["value"]["uiAmountString"] if supply.get("value") else None,
+                "decimals": supply["value"]["decimals"] if supply.get("value") else None,
             }
         return None
 
+    def token_holders(self, mint: str, page: int = 1, page_size: int = 100) -> Optional[Dict[str, Any]]:
+        result = self._rpc_call("getTokenLargestAccounts", [mint])
+        if result and "value" in result:
+            accounts = []
+            for v in result["value"]:
+                if isinstance(v, dict):
+                    accounts.append({
+                        "address": v.get("address", ""),
+                        "amount": str(v.get("amount", 0)),
+                        "decimals": v.get("decimals", 0),
+                        "uiAmountString": str(v.get("uiAmount", v.get("uiAmountString", "0"))),
+                    })
+            return {"accounts": accounts, "note": "Top 20 holders only"}
+        return None
 
-# ========== CLI 测试 ==========
+    def token_holders_total(self, mint: str) -> Optional[int]:
+        return None
+
+    def transfers(self, address: str, page: int = 1, page_size: int = 100,
+                  remove_spam: bool = True, exclude_amount_zero: bool = True) -> Optional[Dict[str, Any]]:
+        return None
+
+    def defi_activities(self, address: str, page: int = 1, page_size: int = 100) -> Optional[Dict[str, Any]]:
+        return None
+
+    def portfolio(self, address: str, token_type: str = "token",
+                  page: int = 1, page_size: int = 100, hide_zero: bool = True) -> Optional[Dict[str, Any]]:
+        return None
+
+    def balance_history(self, address: str) -> Optional[Dict[str, Any]]:
+        return None
+
+    def top_address_transfers(self, address: str, range_days: int = 7) -> Optional[Dict[str, Any]]:
+        return None
+
 
 if __name__ == "__main__":
     import argparse
-
-    parser = argparse.ArgumentParser(description="Solscan Client - 测试逆向 API")
-    parser.add_argument("--address", "-a", help="Solana 地址")
-    parser.add_argument("--tx", "-t", help="交易哈希")
-    parser.add_argument("--mint", "-m", help="代币 Mint 地址")
+    parser = argparse.ArgumentParser(description="Solana RPC Client")
+    parser.add_argument("--address", "-a")
+    parser.add_argument("--addresses", nargs="+")
+    parser.add_argument("--tx", "-t")
+    parser.add_argument("--mint", "-m")
     parser.add_argument("--method", default="account_info",
-                        choices=["account_info", "transactions", "transaction", "token_holders",
-                                 "transfers", "defi_activities", "portfolio", "token_data"])
-    parser.add_argument("--no-solscan", action="store_true", help="禁用 Solscan，仅用公共 RPC")
+                        choices=["account_info", "accounts_info", "transactions", "transaction", "token_holders", "token_data"])
     args = parser.parse_args()
-
-    client = SolscanClient(prefer_solscan=not args.no_solscan)
+    client = SolscanClient()
     print(f"[Source] {client.source}")
-    print(f"[Solscan Available] {SOLSCAN_AVAILABLE}")
-
     result = None
-
     if args.method == "account_info" and args.address:
         result = client.account_info(args.address)
+    elif args.method == "accounts_info" and args.addresses:
+        result = client.accounts_info(args.addresses)
     elif args.method == "transactions" and args.address:
         result = client.transactions(args.address)
     elif args.method == "transaction" and args.tx:
         result = client.transaction(args.tx)
     elif args.method == "token_holders" and args.mint:
         result = client.token_holders(args.mint)
-    elif args.method == "transfers" and args.address:
-        result = client.transfers(args.address)
-    elif args.method == "defi_activities" and args.address:
-        result = client.defi_activities(args.address)
-    elif args.method == "portfolio" and args.address:
-        result = client.portfolio(args.address)
     elif args.method == "token_data" and args.mint:
         result = client.token_data(args.mint)
-    else:
-        print("请提供必要参数，例如：")
-        print("  --address <地址> --method account_info")
-        print("  --tx <交易哈希> --method transaction")
-        print("  --mint <代币地址> --method token_holders")
-
     if result:
         print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print("No result")
